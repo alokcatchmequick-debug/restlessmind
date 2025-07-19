@@ -7,7 +7,8 @@ import google.generativeai as genai
 # ------------ SETUP API KEYS AND LOAD LOCAL RULES ---------------
 TRACXN_API_TOKEN = "a3797606-a2ba-43b0-b270-a579116a3637"
 GEMINI_API_KEY = "a3797606-a2ba-43b0-b270-a579116a3637"
-client = genai.Client(api_key=GEMINI_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
+
 
 try:
     with open("combined_traffic_rules.txt", "r", encoding="utf-8") as f:
@@ -53,9 +54,9 @@ def local_search(question):
     return matches[:3]
 
 def gemini_answer(question):
-    try:
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=question)
-        return response.text
+    model = genai.GenerativeModel("gemini-1.5-flash")  # or gemini-1.5-pro or gemini-1.0-pro
+    response = model.generate_content(question)
+    return response.text
     except Exception as e:
         return f"Gemini error: {e}"
 
