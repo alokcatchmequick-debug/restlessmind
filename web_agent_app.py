@@ -1,11 +1,12 @@
 import streamlit as st
 import requests
 import datetime
-from google import genai
+import json
+import google.generativeai as genai
 
-#-------------- Set Up APIs and Load Rules --------------
+# ------------ SETUP API KEYS AND LOAD LOCAL RULES ---------------
 TRACXN_API_TOKEN = "a3797606-a2ba-43b0-b270-a579116a3637"
-GEMINI_API_KEY = "AIzaSyCvulPIv89YIEaF5-5T3Ne8u5CS6zPHO94"
+GEMINI_API_KEY = "a3797606-a2ba-43b0-b270-a579116a3637"
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 try:
@@ -15,8 +16,33 @@ except FileNotFoundError:
     st.error("combined_traffic_rules.txt not found in this folder!")
     rules = []
 
-#-------------- Utility Functions --------------
+# ---------- GEMINI MEMORY FUNCTIONS (copy these) ----------
+def save_gemini_answer(question, answer, path="gemini_qa.jsonl"):
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"question": question, "answer": answer}) + "\n")
 
+def load_gemini_qa(path="gemini_qa.jsonl"):
+    pairs = []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                pairs.append(json.loads(line))
+    except FileNotFoundError:
+        pass
+    return pairs
+
+def search_gemini_local_db(user_question, qa_pairs, max_results=3):
+    user_q_lower = user_question.lower()
+    results = []
+    for qa in qa_pairs:
+        if any(word in qa["question"].lower() for word in user_q_lower.split()):
+            results.append(qa)
+    return results[:max_results]
+
+# ----- LOAD GEMINI MEMORY ON APP START -----
+qa_pairs = load_gemini_qa()
+
+# ---------- YOUR USUAL HELPER FUNCTIONS ----------
 def local_search(question):
     matches = []
     q_words = [w.lower() for w in question.split()]
@@ -51,8 +77,7 @@ def log_interaction(question, answer, logfile="chat_log.txt"):
         f.write(f"{datetime.datetime.now()} - Q: {question}\n")
         f.write(f"A: {answer}\n\n")
 
-#-------------- Streamlit App UI and Logic --------------
-
+# ---------------- STREAMLIT UI CODE -----------------
 st.title("AI Traffic Rules & Company Agent 🚦🤖")
 
 if "chat_history" not in st.session_state:
@@ -61,11 +86,21 @@ if "chat_history" not in st.session_state:
 user_q = st.text_input("Ask your traffic/business/AI question:")
 
 if st.button("Submit") and user_q:
+    # 1. First, check memory for Gemini answer:
+    offline_results = search_gemini_local_db(user_q, qa_pairs)
+    if offline_results:
+        gemini_result = offline_results[0]["answer"]
+        st.info("Answer provided by: Boi")
+
+    else:
+        gemini_result = gemini_answer(user_q)
+        save_gemini_answer(user_q, gemini_result)  # save for future
+        qa_pairs.append({"question": user_q, "answer": gemini_result})
+
+    # Normal output for all three sources
     local_results = local_search(user_q)
-    gemini_result = gemini_answer(user_q)
     tracxn_result = tracxn_search(user_q)
 
-    # Display answers
     st.subheader("Local Database Answer 🗂️")
     if local_results:
         for r in local_results:
@@ -79,13 +114,10 @@ if st.button("Submit") and user_q:
     st.subheader("Tracxn API Data 💼")
     st.write(tracxn_result)
 
-    # Save to chat history (shows in app)
+    # Save to chat history & log
     st.session_state['chat_history'].append((user_q, gemini_result))
-
-    # Save to log file
     log_interaction(user_q, gemini_result)
 
-# Show chat history
 if st.session_state['chat_history']:
     st.write("---")
     st.write("### Chat History")
@@ -93,3 +125,4 @@ if st.session_state['chat_history']:
         st.markdown(f"**You:** {pair[0]}")
         st.markdown(f"**Agent:** {pair[1]}")
         st.write(" ")
+
