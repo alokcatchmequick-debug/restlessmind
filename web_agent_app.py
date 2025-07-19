@@ -5,11 +5,12 @@ import json
 import google.generativeai as genai
 
 # ------------ SETUP API KEYS AND LOAD LOCAL RULES ---------------
-TRACXN_API_TOKEN = "a3797606-a2ba-43b0-b270-a579116a3637"
-GEMINI_API_KEY = "a3797606-a2ba-43b0-b270-a579116a3637"
+# For production, set API keys as Streamlit secrets.
+TRACXN_API_TOKEN = st.secrets.get("TRACXN_API_TOKEN", "a3797606-a2ba-43b0-b270-a579116a3637")  # fallback for local
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "AIzaSyCvulPIv89YIEaF5-5T3Ne8u5CS6zPHO94")      # fallback for local
 genai.configure(api_key=GEMINI_API_KEY)
 
-
+# Load local rules
 try:
     with open("combined_traffic_rules.txt", "r", encoding="utf-8") as f:
         rules = [line.strip() for line in f if line.strip()]
@@ -17,7 +18,7 @@ except FileNotFoundError:
     st.error("combined_traffic_rules.txt not found in this folder!")
     rules = []
 
-# ---------- GEMINI MEMORY FUNCTIONS (copy these) ----------
+# ---------- GEMINI MEMORY FUNCTIONS ----------
 def save_gemini_answer(question, answer, path="gemini_qa.jsonl"):
     with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps({"question": question, "answer": answer}) + "\n")
@@ -43,7 +44,7 @@ def search_gemini_local_db(user_question, qa_pairs, max_results=3):
 # ----- LOAD GEMINI MEMORY ON APP START -----
 qa_pairs = load_gemini_qa()
 
-# ---------- YOUR USUAL HELPER FUNCTIONS ----------
+# ---------- HELPER FUNCTIONS ----------
 def local_search(question):
     matches = []
     q_words = [w.lower() for w in question.split()]
@@ -54,9 +55,10 @@ def local_search(question):
     return matches[:3]
 
 def gemini_answer(question):
-    model = genai.GenerativeModel("gemini-1.5-flash")  # or gemini-1.5-pro or gemini-1.0-pro
-    response = model.generate_content(question)
-    return response.text
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(question)
+        return response.text
     except Exception as e:
         return f"Gemini error: {e}"
 
@@ -78,7 +80,7 @@ def log_interaction(question, answer, logfile="chat_log.txt"):
         f.write(f"{datetime.datetime.now()} - Q: {question}\n")
         f.write(f"A: {answer}\n\n")
 
-# ---------------- STREAMLIT UI CODE -----------------
+# ---------------- STREAMLIT UI -----------------
 st.title("AI Traffic Rules & Company Agent 🚦🤖")
 
 if "chat_history" not in st.session_state:
@@ -92,7 +94,6 @@ if st.button("Submit") and user_q:
     if offline_results:
         gemini_result = offline_results[0]["answer"]
         st.info("Answer provided by: Boi")
-
     else:
         gemini_result = gemini_answer(user_q)
         save_gemini_answer(user_q, gemini_result)  # save for future
@@ -126,4 +127,3 @@ if st.session_state['chat_history']:
         st.markdown(f"**You:** {pair[0]}")
         st.markdown(f"**Agent:** {pair[1]}")
         st.write(" ")
-
